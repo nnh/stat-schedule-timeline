@@ -243,15 +243,15 @@ function setupTrialSheet_(ss: Spreadsheet, trialInfo: Sheet): void {
     .setFormula(buildTimelineEndFormula_());
   protectAutoColumns_(sheet);
 
-  // タイムライン用の列は普段見る必要がないので、列ごと非表示にする
+  // 自動計算の列（表示名〜タイムライン終了）は普段見る必要がないので、列ごと非表示にする
   // （以前の版で非表示にした列が別の位置にあるため、右側の列をいったん表示してから非表示にし直す）
   sheet.showColumns(
-    TRIAL_TIMELINE_START_COLUMN,
-    sheet.getMaxColumns() - TRIAL_TIMELINE_START_COLUMN + 1,
+    TRIAL_DISPLAY_NAME_COLUMN,
+    sheet.getMaxColumns() - TRIAL_DISPLAY_NAME_COLUMN + 1,
   );
   sheet.hideColumns(
-    TRIAL_TIMELINE_START_COLUMN,
-    TRIAL_TIMELINE_END_COLUMN - TRIAL_TIMELINE_START_COLUMN + 1,
+    TRIAL_DISPLAY_NAME_COLUMN,
+    TRIAL_TIMELINE_END_COLUMN - TRIAL_DISPLAY_NAME_COLUMN + 1,
   );
 
   // 開始日が未入力の試験を目立たせる
