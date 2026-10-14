@@ -18,7 +18,7 @@ export const TRIAL_MASTER_SHEET_NAME = '試験一覧';
 // 終了日が空欄のとき、開始日から何か月分のバーを引くか（カレンダー上の月数）
 export const TIMELINE_MONTHS = 4;
 
-// A〜D 列は手入力、E〜G 列は数式で自動計算
+// A〜D・H 列は手入力、E〜G 列は数式で自動計算
 // 開始日・終了日は手入力（記録として残す）、タイムライン開始・終了はタイムライン表示用（非表示なら空欄）
 export const TRIAL_MASTER_HEADERS = [
   '試験名',
@@ -29,6 +29,7 @@ export const TRIAL_MASTER_HEADERS = [
   '表示名',
   'タイムライン開始',
   'タイムライン終了',
+  '備考',
 ];
 
 // 列（1始まり）
@@ -39,6 +40,8 @@ export const TRIAL_END_COLUMN = 4;
 export const TRIAL_DISPLAY_NAME_COLUMN = 5;
 export const TRIAL_TIMELINE_START_COLUMN = 6;
 export const TRIAL_TIMELINE_END_COLUMN = 7;
+// 備考は手入力。タイムラインのカードの詳細に使う
+export const TRIAL_NOTE_COLUMN = 8;
 
 // 終了日のセルを選んだときに表示する説明（入力規則のヘルプテキスト）
 export const END_DATE_HELP_TEXT = `日付を入力してください。空欄の場合、タイムラインには開始日の${TIMELINE_MONTHS}か月後まで表示されます。`;

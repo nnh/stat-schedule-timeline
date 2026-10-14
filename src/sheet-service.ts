@@ -20,6 +20,7 @@ import {
   TRIAL_MASTER_HEADERS,
   TRIAL_MASTER_SHEET_NAME,
   TRIAL_NAME_COLUMN,
+  TRIAL_NOTE_COLUMN,
   TRIAL_START_COLUMN,
   TRIAL_VISIBILITY_COLUMN,
   VISIBILITY_HIDDEN,
@@ -180,9 +181,9 @@ function setupTrialSheet_(ss: Spreadsheet, trialInfo: Sheet): void {
     .setFontWeight('bold');
   sheet.setFrozenRows(1);
 
-  // 以前の版の数式が、手入力の終了日列や使わなくなった右側の列に残っていれば消す
+  // 以前の版の数式が、手入力の終了日列・備考列に残っていれば消す
   clearLegacyArrayFormula_(sheet, TRIAL_END_COLUMN);
-  clearLegacyArrayFormula_(sheet, TRIAL_TIMELINE_END_COLUMN + 1);
+  clearLegacyArrayFormula_(sheet, TRIAL_NOTE_COLUMN);
 
   // 試験名は試験情報マスタのプロトコルIDを候補に出す（マスタにない値も入力できる）
   getColumnBody_(sheet, TRIAL_NAME_COLUMN).setDataValidation(
