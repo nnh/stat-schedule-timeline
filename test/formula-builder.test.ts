@@ -1,5 +1,5 @@
 import {
-  buildDisplayNameFormula_,
+  buildCardsFormula_,
   buildMissingStartCondition_,
   buildTimelineEndFormula_,
   buildTimelineStartFormula_,
@@ -28,22 +28,32 @@ describe('buildTrialInfoFormula_', () => {
 describe('試験一覧の自動計算の列', () => {
   it('タイムライン開始は開始日（空欄なら今日）。試験名が空欄・非表示なら空欄', () => {
     expect(buildTimelineStartFormula_()).toBe(
-      '=ARRAYFORMULA(IF((A2:A="")+(B2:B="非表示"),"",IF(C2:C="",TODAY(),C2:C)))',
+      '=ARRAYFORMULA(IF((A2:A="")+(B2:B="非表示"),"",IF(D2:D="",TODAY(),D2:D)))',
     );
   });
   it('タイムライン終了は終了日を優先し、空欄なら開始日の4か月後（開始日も空欄ならタイムライン開始と同じ）', () => {
     expect(buildTimelineEndFormula_()).toBe(
-      '=ARRAYFORMULA(IF(F2:F="","",IF(D2:D<>"",D2:D,IF(C2:C="",F2:F,EDATE(C2:C,4)))))',
-    );
-  });
-  it('表示名は試験名に、開始日が空欄なら「（スケジュール未定）」を付ける', () => {
-    expect(buildDisplayNameFormula_()).toBe(
-      '=ARRAYFORMULA(IF(A2:A="","",A2:A&IF(C2:C="","（スケジュール未定）","")))',
+      '=ARRAYFORMULA(IF(F2:F="","",IF(E2:E<>"",E2:E,IF(D2:D="",F2:F,EDATE(D2:D,4)))))',
     );
   });
   it('試験名があり非表示でなく開始日が空欄のときに真になる条件', () => {
     expect(buildMissingStartCondition_()).toBe(
-      '=AND($A2<>"",$B2<>"非表示",$C2="")',
+      '=AND($A2<>"",$B2<>"非表示",$D2="")',
+    );
+  });
+});
+
+describe('buildCardsFormula_', () => {
+  it('試験一覧を試験名・種別・開始日・終了日・備考に正規化し、試験のバーとデータロックポイントの1日カードを試験一覧の行の順に並べる', () => {
+    expect(buildCardsFormula_()).toBe(
+      '=IFNA(VSTACK({"試験名","種別","開始日","終了日","備考"},ARRAYFORMULA(LET(' +
+        "r,ROW('試験一覧'!A2:A)," +
+        "bars,HSTACK(r,IF(r,2),IF(r,\"\"),'試験一覧'!A2:A,'試験一覧'!F2:F,'試験一覧'!G2:G," +
+        "IF('試験一覧'!D2:D=\"\",\"（スケジュール未定）\"&'試験一覧'!H2:H,'試験一覧'!H2:H))," +
+        'd,IF((\'試験一覧\'!F2:F="")+(\'試験一覧\'!C2:C=""),"",\'試験一覧\'!C2:C),' +
+        'dlps,HSTACK(r,IF(r,1),IF(r,"★DLP"),\'試験一覧\'!A2:A,d,d,IF(r,"")),' +
+        'all,VSTACK(bars,dlps),' +
+        'IFERROR(CHOOSECOLS(SORT(FILTER(all,INDEX(all,0,5)<>""),1,TRUE,2,TRUE),4,3,5,6,7),"")))),"")',
     );
   });
 });
