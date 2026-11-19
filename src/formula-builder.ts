@@ -1,5 +1,7 @@
 // シートに書き込む数式を組み立てる（GAS API に依存しない）
 import {
+  CARD_HEADERS,
+  CARD_TYPE_DLP,
   CLOSED_STATUSES,
   DATACENTER_COLUMNS,
   DATACENTER_RANGE,
@@ -8,10 +10,14 @@ import {
   STAT_COLUMNS,
   SCHEDULE_UNDECIDED_SUFFIX,
   TIMELINE_MONTHS,
+  TRIAL_DLP_COLUMN,
   TRIAL_END_COLUMN,
   TRIAL_INFO_SORT_KEYS,
+  TRIAL_MASTER_SHEET_NAME,
   TRIAL_NAME_COLUMN,
+  TRIAL_NOTE_COLUMN,
   TRIAL_START_COLUMN,
+  TRIAL_TIMELINE_END_COLUMN,
   TRIAL_TIMELINE_START_COLUMN,
   TRIAL_VISIBILITY_COLUMN,
   VISIBILITY_HIDDEN,
@@ -108,19 +114,6 @@ export function buildTimelineEndFormula_(): string {
 }
 
 /**
- * 試験一覧の表示名列（2行目）に入れる数式を作る（タイムラインのカードのタイトルに使う）。
- * 試験名に、開始日が空欄なら「（スケジュール未定）」を付ける。
- */
-export function buildDisplayNameFormula_(): string {
-  const name = toColumnLetter_(TRIAL_NAME_COLUMN);
-  const start = toColumnLetter_(TRIAL_START_COLUMN);
-  return (
-    `=ARRAYFORMULA(IF(${name}2:${name}="","",` +
-    `${name}2:${name}&IF(${start}2:${start}="","${SCHEDULE_UNDECIDED_SUFFIX}","")))`
-  );
-}
-
-/**
  * 試験名があり、表示状態が「非表示」でなく、開始日が空欄のときに真になる条件付き書式の数式を作る（2行目基準）。
  */
 export function buildMissingStartCondition_(): string {
@@ -128,4 +121,41 @@ export function buildMissingStartCondition_(): string {
   const visibility = toColumnLetter_(TRIAL_VISIBILITY_COLUMN);
   const start = toColumnLetter_(TRIAL_START_COLUMN);
   return `=AND($${name}2<>"",$${visibility}2<>"${VISIBILITY_HIDDEN}",$${start}2="")`;
+}
+
+/**
+ * タイムライン用データシートの A1 に入れる数式を作る（見出し行を含む）。
+ * 試験一覧の1つの試験から次の2行を作り、試験一覧の行の順（同じ試験ではデータロックポイントが先）に並べる。
+ * - 試験のバー: 種別は空欄。タイムライン開始〜タイムライン終了。備考は試験一覧の備考（開始日が空欄なら先頭に「（スケジュール未定）」）
+ * - データロックポイント: 種別は「★DLP」。データロックポイントの1日だけ。備考は空欄
+ * タイムライン開始が空欄（試験名が空欄・非表示）の試験と、データロックポイントが空欄の行は出さない。
+ * 該当する行がないときは見出し行だけになる。
+ * （FILTER が #N/A になると CHOOSECOLS が #VALUE! になるため IFERROR で空欄にし、VSTACK で足りない列の #N/A は IFNA で空欄にする）
+ */
+export function buildCardsFormula_(): string {
+  const sheet = `'${TRIAL_MASTER_SHEET_NAME}'!`;
+  const col = (column: number) => {
+    const letter = toColumnLetter_(column);
+    return `${sheet}${letter}2:${letter}`;
+  };
+  const name = col(TRIAL_NAME_COLUMN);
+  const dlp = col(TRIAL_DLP_COLUMN);
+  const start = col(TRIAL_START_COLUMN);
+  const timelineStart = col(TRIAL_TIMELINE_START_COLUMN);
+  const timelineEnd = col(TRIAL_TIMELINE_END_COLUMN);
+  const note = col(TRIAL_NOTE_COLUMN);
+  const headerLiteral = CARD_HEADERS.map(label => `"${label}"`).join(',');
+  // 固定の値は IF(r,…) で行数分に広げる（そのまま HSTACK に渡すと1行目以外が #N/A になる）
+  // 並べ替え用に先頭へ行番号と順番（DLP=1, 試験のバー=2）の列を付けて組み立て、最後に外す
+  // （all の列: 行番号, 順番, 種別, 試験名, 開始日, 終了日, 備考）
+  return (
+    `=IFNA(VSTACK({${headerLiteral}},ARRAYFORMULA(LET(` +
+    `r,ROW(${name}),` +
+    `bars,HSTACK(r,IF(r,2),IF(r,""),${name},${timelineStart},${timelineEnd},` +
+    `IF(${start}="","${SCHEDULE_UNDECIDED_SUFFIX}"&${note},${note})),` +
+    `d,IF((${timelineStart}="")+(${dlp}=""),"",${dlp}),` +
+    `dlps,HSTACK(r,IF(r,1),IF(r,"${escapeFormulaString_(CARD_TYPE_DLP)}"),${name},d,d,IF(r,"")),` +
+    'all,VSTACK(bars,dlps),' +
+    'IFERROR(CHOOSECOLS(SORT(FILTER(all,INDEX(all,0,5)<>""),1,TRUE,2,TRUE),4,3,5,6,7),"")))),"")'
+  );
 }

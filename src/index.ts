@@ -13,7 +13,7 @@ function onOpen(): void {
 }
 
 /**
- * セルを編集したときに、試験一覧の試験名に淡い色を付ける（シンプルトリガー）。
+ * セルを編集したときに、試験一覧の試験名に淡い色を付け、タイムラインのカードの色を付け直す（シンプルトリガー）。
  */
 function onEdit(e: GoogleAppsScript.Events.SheetsOnEdit): void {
   colorTrialNamesOnEdit_(e);

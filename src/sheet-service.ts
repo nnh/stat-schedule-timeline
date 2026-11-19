@@ -1,16 +1,22 @@
 // スプレッドシート操作（GAS API に依存する部分）
 import {
   AUTO_COLUMNS_PROTECTION_DESCRIPTION,
+  CARD_END_COLUMN,
+  CARD_HEADERS,
+  CARD_NAME_COLUMN,
+  CARD_SHEET_NAME,
+  CARD_START_COLUMN,
+  CARD_TYPE_COLUMN,
   DATE_FORMAT,
+  DLP_COLOR,
   END_DATE_HELP_TEXT,
-  LEGACY_PROTECTION_DESCRIPTIONS,
   MISSING_START_BACKGROUND,
   README_SHEET_NAME,
   README_URL,
   RESEARCH_SYSTEM_URL_DUMMY,
   RESEARCH_SYSTEM_URL_PROPERTY,
   TRIAL_COLORS,
-  TRIAL_DISPLAY_NAME_COLUMN,
+  TRIAL_DLP_COLUMN,
   TRIAL_TIMELINE_END_COLUMN,
   TRIAL_TIMELINE_START_COLUMN,
   TRIAL_END_COLUMN,
@@ -20,20 +26,18 @@ import {
   TRIAL_MASTER_HEADERS,
   TRIAL_MASTER_SHEET_NAME,
   TRIAL_NAME_COLUMN,
-  TRIAL_NOTE_COLUMN,
   TRIAL_START_COLUMN,
   TRIAL_VISIBILITY_COLUMN,
   VISIBILITY_HIDDEN,
-  VISIBILITY_SHOWN,
 } from './constants';
 import {
-  buildDisplayNameFormula_,
+  buildCardsFormula_,
   buildMissingStartCondition_,
   buildTimelineEndFormula_,
   buildTimelineStartFormula_,
   buildTrialInfoFormula_,
 } from './formula-builder';
-import {pickTrialColor_} from './schedule-logic';
+import {pickCardColors_, pickTrialColors_} from './schedule-logic';
 
 type Sheet = GoogleAppsScript.Spreadsheet.Sheet;
 type Spreadsheet = GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -114,25 +118,19 @@ function setupReadmeSheet_(ss: Spreadsheet): void {
 }
 
 /**
- * 試験一覧の自動計算の列（表示名〜タイムライン終了）に、編集しようとすると警告を表示する保護をかける（編集自体は可能）。
- * 初期設定を再実行しても重複しないよう、以前にかけた同じ保護（以前の版の保護を含む）は外してからかけ直す。
+ * 数式で自動計算する範囲に、編集しようとすると警告を表示する保護をかける（編集自体は可能）。
+ * 初期設定を再実行しても重複しないよう、そのシートで以前にかけた同じ保護は外してからかけ直す。
  */
-function protectAutoColumns_(sheet: Sheet): void {
-  const descriptions = [
-    AUTO_COLUMNS_PROTECTION_DESCRIPTION,
-    ...LEGACY_PROTECTION_DESCRIPTIONS,
-  ];
-  sheet
+function protectAutoRange_(range: GoogleAppsScript.Spreadsheet.Range): void {
+  range
+    .getSheet()
     .getProtections(SpreadsheetApp.ProtectionType.RANGE)
-    .filter(protection => descriptions.includes(protection.getDescription()))
-    .forEach(protection => protection.remove());
-  sheet
-    .getRange(
-      1,
-      TRIAL_DISPLAY_NAME_COLUMN,
-      sheet.getMaxRows(),
-      TRIAL_TIMELINE_END_COLUMN - TRIAL_DISPLAY_NAME_COLUMN + 1,
+    .filter(
+      protection =>
+        protection.getDescription() === AUTO_COLUMNS_PROTECTION_DESCRIPTION,
     )
+    .forEach(protection => protection.remove());
+  range
     .protect()
     .setDescription(AUTO_COLUMNS_PROTECTION_DESCRIPTION)
     .setWarningOnly(true);
@@ -160,30 +158,16 @@ function highlightMissingStart_(sheet: Sheet): void {
 }
 
 /**
- * 以前の版で2行目に入れていた ARRAYFORMULA が残っていれば、その列の2行目以降を空にする。
- * （列の構成を変えたため、手入力の列や使わなくなった列に古い数式が残らないようにする）
- */
-function clearLegacyArrayFormula_(sheet: Sheet, column: number): void {
-  if (sheet.getRange(2, column).getFormula().startsWith('=ARRAYFORMULA')) {
-    getColumnBody_(sheet, column).clearContent();
-  }
-}
-
-/**
- * 試験一覧シートを作成し、ヘッダー・入力規則・自動計算の列（表示名〜タイムライン終了）の数式を設定する。
+ * 試験一覧シートを作成し、ヘッダー・入力規則・自動計算の列（タイムライン開始・終了）の数式を設定する。
  * 既に入力されたデータは上書きしない（ヘッダーと自動計算の列の数式は設定し直す）。
  */
-function setupTrialSheet_(ss: Spreadsheet, trialInfo: Sheet): void {
+function setupTrialSheet_(ss: Spreadsheet, trialInfo: Sheet): Sheet {
   const sheet = getOrCreateSheet_(ss, TRIAL_MASTER_SHEET_NAME);
   sheet
     .getRange(1, 1, 1, TRIAL_MASTER_HEADERS.length)
     .setValues([TRIAL_MASTER_HEADERS])
     .setFontWeight('bold');
   sheet.setFrozenRows(1);
-
-  // 以前の版の数式が、手入力の終了日列・備考列に残っていれば消す
-  clearLegacyArrayFormula_(sheet, TRIAL_END_COLUMN);
-  clearLegacyArrayFormula_(sheet, TRIAL_NOTE_COLUMN);
 
   // 試験名は試験情報マスタのプロトコルIDを候補に出す（マスタにない値も入力できる）
   getColumnBody_(sheet, TRIAL_NAME_COLUMN).setDataValidation(
@@ -192,13 +176,22 @@ function setupTrialSheet_(ss: Spreadsheet, trialInfo: Sheet): void {
       .setAllowInvalid(true)
       .build(),
   );
+  // 表示状態は非表示にしたいときだけ選ぶ（空欄なら表示）
   getColumnBody_(sheet, TRIAL_VISIBILITY_COLUMN).setDataValidation(
     SpreadsheetApp.newDataValidation()
-      .requireValueInList([VISIBILITY_SHOWN, VISIBILITY_HIDDEN])
+      .requireValueInList([VISIBILITY_HIDDEN])
       .setAllowInvalid(false)
       .build(),
   );
-  // 開始日・終了日は手入力の日付
+  // データロックポイント・開始日・終了日は手入力の日付
+  getColumnBody_(sheet, TRIAL_DLP_COLUMN)
+    .setNumberFormat(DATE_FORMAT)
+    .setDataValidation(
+      SpreadsheetApp.newDataValidation()
+        .requireDate()
+        .setAllowInvalid(false)
+        .build(),
+    );
   getColumnBody_(sheet, TRIAL_START_COLUMN)
     .setNumberFormat(DATE_FORMAT)
     .setDataValidation(
@@ -223,46 +216,65 @@ function setupTrialSheet_(ss: Spreadsheet, trialInfo: Sheet): void {
     TRIAL_TIMELINE_END_COLUMN - TRIAL_TIMELINE_START_COLUMN + 1,
   ).setNumberFormat(DATE_FORMAT);
 
-  // 表示名〜タイムライン終了は数式で自動計算する（ARRAYFORMULA が下に展開されるよう、2行目以降は空にしてから書き込む）
+  // タイムライン開始・終了は数式で自動計算する（ARRAYFORMULA が下に展開されるよう、2行目以降は空にしてから書き込む）
   const autoBody = getColumnBody_(
     sheet,
-    TRIAL_DISPLAY_NAME_COLUMN,
-    TRIAL_TIMELINE_END_COLUMN - TRIAL_DISPLAY_NAME_COLUMN + 1,
+    TRIAL_TIMELINE_START_COLUMN,
+    TRIAL_TIMELINE_END_COLUMN - TRIAL_TIMELINE_START_COLUMN + 1,
   );
   autoBody.clearContent();
-  // 自動計算の列には入力規則を付けない（以前の版で付けた日付の入力規則が残っていれば外す）
-  autoBody.clearDataValidations();
-  sheet
-    .getRange(2, TRIAL_DISPLAY_NAME_COLUMN)
-    .setFormula(buildDisplayNameFormula_());
   sheet
     .getRange(2, TRIAL_TIMELINE_START_COLUMN)
     .setFormula(buildTimelineStartFormula_());
   sheet
     .getRange(2, TRIAL_TIMELINE_END_COLUMN)
     .setFormula(buildTimelineEndFormula_());
-  protectAutoColumns_(sheet);
-
-  // 自動計算の列（表示名〜タイムライン終了）は普段見る必要がないので、列ごと非表示にする
-  // （以前の版で非表示にした列が別の位置にあるため、右側の列をいったん表示してから非表示にし直す）
-  sheet.showColumns(
-    TRIAL_DISPLAY_NAME_COLUMN,
-    sheet.getMaxColumns() - TRIAL_DISPLAY_NAME_COLUMN + 1,
+  protectAutoRange_(
+    sheet.getRange(
+      1,
+      TRIAL_TIMELINE_START_COLUMN,
+      sheet.getMaxRows(),
+      TRIAL_TIMELINE_END_COLUMN - TRIAL_TIMELINE_START_COLUMN + 1,
+    ),
   );
+
+  // 自動計算の列（タイムライン開始・終了）は普段見る必要がないので、列ごと非表示にする
   sheet.hideColumns(
-    TRIAL_DISPLAY_NAME_COLUMN,
-    TRIAL_TIMELINE_END_COLUMN - TRIAL_DISPLAY_NAME_COLUMN + 1,
+    TRIAL_TIMELINE_START_COLUMN,
+    TRIAL_TIMELINE_END_COLUMN - TRIAL_TIMELINE_START_COLUMN + 1,
   );
 
   // 開始日が未入力の試験を目立たせる
   highlightMissingStart_(sheet);
 
   // 既に入力済みの試験名にも色を付ける
-  colorTrialNames_(sheet, 2, sheet.getMaxRows() - 1);
+  colorTrialNames_(sheet);
+  return sheet;
 }
 
 /**
- * README・試験情報マスタ・試験一覧の各シートを作成し、書式と数式を設定する。
+ * タイムライン用データシートを作成し、試験一覧を正規化する数式を A1 に書き込む（タイムライン表示の元データ）。
+ */
+function setupCardSheet_(ss: Spreadsheet): Sheet {
+  const sheet = getOrCreateSheet_(ss, CARD_SHEET_NAME);
+  // 数式の結果が展開される範囲に値が残っているとエラーになるため、シートを空にしてから書き込む
+  sheet.clearContents();
+  sheet.getRange(1, 1).setFormula(buildCardsFormula_());
+  sheet.getRange(1, 1, 1, CARD_HEADERS.length).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  getColumnBody_(
+    sheet,
+    CARD_START_COLUMN,
+    CARD_END_COLUMN - CARD_START_COLUMN + 1,
+  ).setNumberFormat(DATE_FORMAT);
+  protectAutoRange_(
+    sheet.getRange(1, 1, sheet.getMaxRows(), CARD_HEADERS.length),
+  );
+  return sheet;
+}
+
+/**
+ * README・試験情報マスタ・試験一覧・タイムライン用データの各シートを作成し、書式と数式を設定する。
  */
 export function setupSheets_(): void {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -271,41 +283,67 @@ export function setupSheets_(): void {
 
   setupReadmeSheet_(ss);
   const trialInfo = setupTrialInfoSheet_(ss);
-  setupTrialSheet_(ss, trialInfo);
+  const trialSheet = setupTrialSheet_(ss, trialInfo);
+  const cardSheet = setupCardSheet_(ss);
+  syncCardColors_(trialSheet, cardSheet);
 }
 
 // ---- 編集時の処理 ----
 
 /**
- * 試験名のセルのうち、まだ色が付いていないものに淡い色を付ける（タイムラインのバーの色になる）。
- * 既に色が付いているセル（手動で変えた色を含む）は変えない。
+ * 試験名のセルに淡い色を付ける（タイムラインのバーの色になる）。
+ * - 試験名ごとに最初の行は、まだ色が付いていなければ色を付ける（手動で変えた色を含め、既にある色は変えない）
+ * - 同じ試験名の2つ目以降の行は、最初の行の色にそろえる
+ * 同じ試験名が離れた行にもありうるため、編集した範囲だけでなく列全体を見る。
  */
-function colorTrialNames_(sheet: Sheet, startRow: number, numRows: number) {
-  const range = sheet.getRange(startRow, TRIAL_NAME_COLUMN, numRows, 1);
-  const names = range.getValues();
-  const backgrounds = range.getBackgrounds();
-  let changed = false;
-  const next = backgrounds.map((row, i) => {
-    const color = pickTrialColor_(
-      startRow + i,
-      String(names[i][0]),
-      row[0],
-      TRIAL_COLORS,
-    );
-    if (color) {
-      changed = true;
-      return [color];
-    }
-    return row;
-  });
+function colorTrialNames_(sheet: Sheet): void {
+  const range = getColumnBody_(sheet, TRIAL_NAME_COLUMN);
+  const names = range.getValues().map(row => String(row[0]));
+  const backgrounds = range.getBackgrounds().map(row => row[0]);
+  const next = pickTrialColors_(names, backgrounds, TRIAL_COLORS);
   // 変更があるときだけまとめて書き込む
-  if (changed) {
-    range.setBackgrounds(next);
+  if (next.some((color, i) => color !== backgrounds[i])) {
+    range.setBackgrounds(next.map(color => [color]));
   }
 }
 
 /**
- * 試験一覧で試験名が入力されたとき、そのセルに淡い色を付ける。
+ * タイムライン用データシートの試験名のセルに色を付ける（タイムラインのカードの色になる）。
+ * 試験のバーは試験一覧の試験名のセルの色、データロックポイントは共通の色にする。
+ */
+function syncCardColors_(trialSheet: Sheet, cardSheet: Sheet): void {
+  // 編集内容を数式に反映させてから読む
+  SpreadsheetApp.flush();
+  const trialRange = trialSheet.getRange(
+    2,
+    TRIAL_NAME_COLUMN,
+    trialSheet.getMaxRows() - 1,
+    1,
+  );
+  const trialNames = trialRange.getValues().map(row => String(row[0]));
+  const trialBackgrounds = trialRange.getBackgrounds().map(row => row[0]);
+  const numRows = cardSheet.getMaxRows() - 1;
+  // 試験名と種別の列を読む（隣り合っている前提で、まとめて取得する）
+  const cards = cardSheet
+    .getRange(2, CARD_NAME_COLUMN, numRows, CARD_TYPE_COLUMN)
+    .getValues()
+    .map(row => ({
+      name: String(row[CARD_NAME_COLUMN - 1]),
+      type: String(row[CARD_TYPE_COLUMN - 1]),
+    }));
+  const colors = pickCardColors_(
+    cards,
+    trialNames,
+    trialBackgrounds,
+    DLP_COLOR,
+  );
+  cardSheet
+    .getRange(2, CARD_NAME_COLUMN, numRows, 1)
+    .setBackgrounds(colors.map(color => [color]));
+}
+
+/**
+ * 試験一覧が編集されたとき、試験名のセルに淡い色を付け、タイムラインのカードの色を付け直す。
  */
 export function colorTrialNamesOnEdit_(
   e: GoogleAppsScript.Events.SheetsOnEdit,
@@ -315,15 +353,15 @@ export function colorTrialNamesOnEdit_(
   if (sheet.getName() !== TRIAL_MASTER_SHEET_NAME) {
     return;
   }
-  // 編集範囲が試験名の列（2行目以降）を含むときだけ処理する
-  const lastRow = range.getLastRow();
-  const firstRow = Math.max(range.getRow(), 2);
-  if (
-    lastRow < 2 ||
-    range.getColumn() > TRIAL_NAME_COLUMN ||
-    range.getLastColumn() < TRIAL_NAME_COLUMN
-  ) {
+  // 見出し行だけの編集は対象外
+  if (range.getLastRow() < 2) {
     return;
   }
-  colorTrialNames_(sheet, firstRow, lastRow - firstRow + 1);
+  // 最初の行の色を手動で変えた場合も、次の編集で同じ試験名の行にそろうよう、どの列の編集でも色を付け直す
+  colorTrialNames_(sheet);
+  // どの列の編集でもタイムライン用データシートの行の並びが変わりうるため、カードの色を付け直す
+  const cardSheet = sheet.getParent().getSheetByName(CARD_SHEET_NAME);
+  if (cardSheet) {
+    syncCardColors_(sheet, cardSheet);
+  }
 }

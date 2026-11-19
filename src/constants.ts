@@ -10,23 +10,26 @@ export const README_URL =
 // 研究管理システムから取り込んだ試験情報を置くシート名
 export const TRIAL_INFO_SHEET_NAME = '試験情報マスタ';
 
-// 試験の一覧（タイムライン表示の元データも兼ねる）
+// 試験の一覧（手入力）
 export const TRIAL_MASTER_SHEET_NAME = '試験一覧';
+
+// 試験一覧をタイムライン表示用に正規化したシート（数式で自動作成。タイムライン表示の元データ）
+export const CARD_SHEET_NAME = 'タイムライン用データ';
 
 // ---- 試験一覧シート ----
 
 // 終了日が空欄のとき、開始日から何か月分のバーを引くか（カレンダー上の月数）
 export const TIMELINE_MONTHS = 4;
 
-// A〜D・H 列は手入力、E〜G 列は数式で自動計算
-// 開始日・終了日は手入力（記録として残す）、タイムライン開始・終了はタイムライン表示用（非表示なら空欄）
+// A〜E・H 列は手入力、F・G 列は数式で自動計算
+// 開始日・終了日は手入力（記録として残す）、タイムライン開始・終了は試験のバーの期間（非表示なら空欄）
 export const TRIAL_MASTER_HEADERS = [
   '試験名',
   '表示状態',
+  'データロックポイント',
   '開始日',
   // 空欄でもよいこと・空欄のときの扱いが分かるよう、見出しに書いておく
   `終了日（空欄なら開始日+${TIMELINE_MONTHS}か月）`,
-  '表示名',
   'タイムライン開始',
   'タイムライン終了',
   '備考',
@@ -35,48 +38,58 @@ export const TRIAL_MASTER_HEADERS = [
 // 列（1始まり）
 export const TRIAL_NAME_COLUMN = 1;
 export const TRIAL_VISIBILITY_COLUMN = 2;
-export const TRIAL_START_COLUMN = 3;
-export const TRIAL_END_COLUMN = 4;
-export const TRIAL_DISPLAY_NAME_COLUMN = 5;
+// データロックポイントは手入力（1日）。タイムラインに1日だけのカードとして表示する
+export const TRIAL_DLP_COLUMN = 3;
+export const TRIAL_START_COLUMN = 4;
+export const TRIAL_END_COLUMN = 5;
 export const TRIAL_TIMELINE_START_COLUMN = 6;
 export const TRIAL_TIMELINE_END_COLUMN = 7;
 // 備考は手入力。タイムラインのカードの詳細に使う
 export const TRIAL_NOTE_COLUMN = 8;
 
+// ---- タイムライン用データシート ----
+// 1つの試験から「試験のバー」と「データロックポイントの1日カード」の2行を作り、縦に並べる
+export const CARD_HEADERS = ['試験名', '種別', '開始日', '終了日', '備考'];
+
+// 列（1始まり）
+// 試験名はカードのタイトル・グループ化・カードの色に使う（試験一覧の試験名のセルの色を写す）
+export const CARD_NAME_COLUMN = 1;
+export const CARD_TYPE_COLUMN = 2;
+export const CARD_START_COLUMN = 3;
+export const CARD_END_COLUMN = 4;
+
+// データロックポイントの行の種別（試験のバーの行の種別は空欄）
+export const CARD_TYPE_DLP = '★DLP';
+
+// データロックポイントのカードの色（全試験共通）
+export const DLP_COLOR = '#ea9999';
+
 // 終了日のセルを選んだときに表示する説明（入力規則のヘルプテキスト）
 export const END_DATE_HELP_TEXT = `日付を入力してください。空欄の場合、タイムラインには開始日の${TIMELINE_MONTHS}か月後まで表示されます。`;
 
-// 開始日が空欄の試験の表示名（タイムラインのカードのタイトル）に付ける文字
+// 開始日が空欄の試験の、タイムラインのカードの詳細（備考）の先頭に付ける文字
 export const SCHEDULE_UNDECIDED_SUFFIX = '（スケジュール未定）';
 
 // 試験名があり非表示でないのに開始日が空欄のとき、開始日のセルに付ける背景色（条件付き書式）
 export const MISSING_START_BACKGROUND = '#fff2cc';
 
-// 自動計算の列（表示名〜タイムライン終了）にかける保護（編集時に警告を表示）の説明。
+// 自動計算の列（タイムライン開始・終了）にかける保護（編集時に警告を表示）の説明。
 // 初期設定の再実行時に同じ保護を探して付け直すのにも使う
 export const AUTO_COLUMNS_PROTECTION_DESCRIPTION =
   'この列は数式で自動計算しています。直接編集しないでください。';
 
-// 以前の版でかけた保護の説明（初期設定の再実行時に外すため）
-export const LEGACY_PROTECTION_DESCRIPTIONS = [
-  '開始日・終了日は数式で自動計算しています。直接編集しないでください。',
-  '開始日・終了日・表示名は数式で自動計算しています。直接編集しないでください。',
-];
-
-// 表示状態の選択肢（空欄は「表示」として扱う）
-export const VISIBILITY_SHOWN = '表示';
+// 表示状態の選択肢。空欄なら表示し、非表示にしたいときだけ「非表示」を選ぶ
 export const VISIBILITY_HIDDEN = '非表示';
 
 // 試験名のセルに付ける背景色（淡い色）。行番号に応じて順番に割り当て、足りなければ繰り返す
-// タイムライン表示の「カードの色」に試験名の列を指定すると、バーの色になる
+// タイムラインのカードの色（試験のバーの色）になる
+// データロックポイントのカード（DLP_COLOR）を目立たせるため、赤系の色は使わない
 export const TRIAL_COLORS = [
-  '#fde2e4',
   '#dcecc8',
   '#cfe8f3',
   '#fff1c1',
   '#e6dcf5',
   '#d4f0e2',
-  '#ffe2cc',
   '#dde5fb',
 ];
 
